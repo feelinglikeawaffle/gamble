@@ -2,54 +2,27 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Gambling Progression Prototype</title>
+  <title>Real Slot Machine</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <div class="app">
-    <header class="top-bar">
-      <div class="stat"><span class="label">Money</span><span id="money">$1,000</span></div>
-      <div class="stat"><span class="label">XP</span><span id="xp">0</span></div>
-      <div class="stat"><span class="label">Level</span><span id="level">1</span></div>
-      <div class="stat"><span class="label">Day</span><span id="day">1</span></div>
-      <div class="stat"><span class="label">Time Left</span><span id="timer">05:00</span></div>
-    </header>
 
-    <main class="main">
-      <section class="games-panel">
-        <h2>Games</h2>
-        <div id="games-list"></div>
-      </section>
+  <div class="slot-container">
+    <h1>Slot Machine</h1>
 
-      <section class="play-panel">
-        <h2 id="current-game-title">Select a game</h2>
+    <div class="money">Money: <span id="money">$1,000</span></div>
 
-        <div class="bet-row">
-          <label for="bet-amount">Bet:</label>
-          <input type="number" id="bet-amount" min="1" step="1" value="50">
-          <span id="min-bet-label"></span>
-        </div>
+    <div class="slot-grid" id="slot-grid">
+      <!-- Filled by JS -->
+    </div>
 
-        <button id="play-button" disabled>Play</button>
+    <div class="controls">
+      <label>Bet:</label>
+      <input type="number" id="bet" value="50" min="1">
+      <button id="spin-btn">SPIN</button>
+    </div>
 
-        <div class="result" id="result-message"></div>
-
-        <div class="info">
-          <p><strong>Day Summary:</strong></p>
-          <p>Money at start of day: <span id="day-start-money">$1,000</span></p>
-          <p>Money change today: <span id="day-profit">$0</span></p>
-        </div>
-      </section>
-
-      <section class="log-panel">
-        <h2>Log</h2>
-        <div id="log"></div>
-      </section>
-    </main>
-
-    <footer class="footer">
-      <p>Prototype: 5‑minute days, profit → XP, wagered amount raises next day’s minimum bet per game.</p>
-    </footer>
+    <div id="result"></div>
   </div>
 
   <script src="script.js"></script>
