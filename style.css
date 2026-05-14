@@ -22,6 +22,7 @@ body {
   grid-template-rows: repeat(3, 80px);
   gap: 6px;
   margin: 20px auto;
+  overflow: hidden;
 }
 
 .slot-cell {
@@ -34,25 +35,8 @@ body {
   align-items: center;
 }
 
-.controls {
-  margin-top: 10px;
-}
-
-button {
-  padding: 8px 16px;
-  margin-left: 10px;
-  background: gold;
-  border: none;
-  font-weight: bold;
-  cursor: pointer;
-  border-radius: 6px;
-}
-
-button:disabled {
-  opacity: 0.4;
-}
-
-#result {
-  margin-top: 15px;
-  font-size: 18px;
+.reel {
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.15s linear;
 }
