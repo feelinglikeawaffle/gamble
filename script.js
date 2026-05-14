@@ -80,26 +80,46 @@ function getFinalGrid() {
   return result;
 }
 
+// Force visual grid to match scoring grid
+function renderFinalGrid(finalGrid) {
+  const cells = document.querySelectorAll(".slot-cell");
+  for (let i = 0; i < 9; i++) {
+    cells[i].textContent = finalGrid[i];
+  }
+}
+
 // Highlight winning cells
 function highlightCells(indices) {
   const cells = [...document.querySelectorAll(".slot-cell")];
   indices.forEach(i => cells[i].classList.add("win-cell"));
 }
 
-// --- HIDDEN ODDS SYSTEM ---
+// --- BOOSTED HIDDEN ODDS SYSTEM ---
+// MUCH more common now
 function rollHiddenOutcome() {
   const roll = Math.random() * 100;
 
-  if (roll < 0.5) return "full9";      // 0.5%
-  if (roll < 1.5) return "match8";     // next 1%
-  if (roll < 4.5) return "rect6";      // next 3%
-  if (roll < 10.5) return "square4";   // next 6%
-  if (roll < 20.5) return "line3";     // next 10%
+  if (roll < 3) return "full9";      // 3%
+  if (roll < 8) return "match8";     // next 5%
+  if (roll < 18) return "rect6";     // next 10%
+  if (roll < 33) return "square4";   // next 15%
+  if (roll < 55) return "line3";     // next 22%
 
   return "none";
 }
 
 // --- PATTERN FORCERS ---
+function randomSymbol() {
+  const all = ["🍒","🍋","🔔","⭐","💎"];
+  return all[Math.floor(Math.random()*all.length)];
+}
+
+function randomSymbolDifferent(s) {
+  let r = s;
+  while (r === s) r = randomSymbol();
+  return r;
+}
+
 function forceFull9() {
   const s = randomSymbol();
   return Array(9).fill(s);
@@ -152,17 +172,6 @@ function forceLine3() {
   const grid = Array(9).fill(randomSymbol());
   line.forEach(i => grid[i] = s);
   return grid;
-}
-
-function randomSymbol() {
-  const all = ["🍒","🍋","🔔","⭐","💎"];
-  return all[Math.floor(Math.random()*all.length)];
-}
-
-function randomSymbolDifferent(s) {
-  let r = s;
-  while (r === s) r = randomSymbol();
-  return r;
 }
 
 // YOUR CUSTOM SCORING SYSTEM
@@ -301,6 +310,9 @@ spinBtn.addEventListener("click", async () => {
     case "line3": finalGrid = forceLine3(); break;
     default: finalGrid = getFinalGrid(); break;
   }
+
+  // FIX: update visuals to match scoring
+  renderFinalGrid(finalGrid);
 
   const score = scoreCustom(finalGrid, bet);
 
