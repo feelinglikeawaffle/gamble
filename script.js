@@ -11,9 +11,24 @@ const reelStrips = [
   ["🔔","🍒","🍋","⭐","🍋","💎","🍒","🔔","🍋","⭐"]
 ];
 
-const reelPositions = [0,0,0]; // index in each strip
+const reelPositions = [0,0,0];
 
-// Build 3 reels visually
+// PAYLINES
+const paylines = [
+  [0,1,2], [3,4,5], [6,7,8],
+  [0,4,8], [2,4,6]
+];
+
+// PAYOUT TABLE
+const payouts = {
+  "🍒": 5,
+  "🍋": 8,
+  "🔔": 15,
+  "⭐": 40,
+  "💎": 100
+};
+
+// Build initial grid
 function buildGrid() {
   gridEl.innerHTML = "";
   for (let r = 0; r < 3; r++) {
@@ -21,7 +36,6 @@ function buildGrid() {
     reel.className = "reel";
     reel.id = "reel-" + r;
 
-    // Fill with 3 visible symbols
     for (let i = 0; i < 3; i++) {
       const cell = document.createElement("div");
       cell.className = "slot-cell";
@@ -35,7 +49,7 @@ function buildGrid() {
 
 buildGrid();
 
-// SPIN ANIMATION
+// FAST SPIN (150–250ms)
 async function spinReel(reelIndex, duration) {
   const strip = reelStrips[reelIndex];
   const reel = document.getElementById("reel-" + reelIndex);
@@ -47,11 +61,10 @@ async function spinReel(reelIndex, duration) {
     function animate(time) {
       const elapsed = time - start;
 
-      if (elapsed - lastUpdate > 60) {
+      if (elapsed - lastUpdate > 40) { // FAST
         reelPositions[reelIndex] = (reelPositions[reelIndex] + 1) % strip.length;
         lastUpdate = elapsed;
 
-        // Update visible symbols
         reel.innerHTML = "";
         for (let i = 0; i < 3; i++) {
           const cell = document.createElement("div");
@@ -72,7 +85,6 @@ async function spinReel(reelIndex, duration) {
   });
 }
 
-// GET FINAL GRID
 function getFinalGrid() {
   let result = [];
   for (let r = 0; r < 3; r++) {
@@ -83,38 +95,37 @@ function getFinalGrid() {
   return result;
 }
 
-// PAYLINES
-const paylines = [
-  [0,1,2], [3,4,5], [6,7,8],
-  [0,4,8], [2,4,6]
-];
-
-// PAYOUT TABLE
-const payouts = {
-  "🍒": 5,
-  "🍋": 8,
-  "🔔": 15,
-  "⭐": 40,
-  "💎": 100
-};
+function highlightCells(indices) {
+  const cells = [...document.querySelectorAll(".slot-cell")];
+  indices.forEach(i => cells[i].classList.add("win-cell"));
+}
 
 function calculatePayout(grid, bet) {
   let win = 0;
+  let breakdown = [];
 
-  for (const line of paylines) {
+  paylines.forEach(line => {
     const a = grid[line[0]];
     const b = grid[line[1]];
     const c = grid[line[2]];
 
     if (a === b && b === c) {
-      win += bet * payouts[a];
-    }
-  }
+      const mult = payouts[a];
+      const amount = bet * mult;
+      win += amount;
 
-  return win;
+      breakdown.push({
+        symbol: a,
+        line,
+        multiplier: mult,
+        amount
+      });
+    }
+  });
+
+  return { win, breakdown };
 }
 
-// SPIN BUTTON
 spinBtn.addEventListener("click", async () => {
   const bet = Number(document.getElementById("bet").value);
   if (bet <= 0 || bet > money) {
@@ -127,17 +138,28 @@ spinBtn.addEventListener("click", async () => {
   resultEl.textContent = "";
   spinBtn.disabled = true;
 
-  // Spin reels with staggered timing
-  await spinReel(0, 1200);
-  await spinReel(1, 1600);
-  await spinReel(2, 2000);
+  // Clear old highlights
+  document.querySelectorAll(".slot-cell").forEach(c => c.classList.remove("win-cell"));
+
+  // FAST staggered spin
+  await spinReel(0, 300);
+  await spinReel(1, 450);
+  await spinReel(2, 600);
 
   const finalGrid = getFinalGrid();
-  const win = calculatePayout(finalGrid, bet);
+  const { win, breakdown } = calculatePayout(finalGrid, bet);
 
   if (win > 0) {
     money += win;
-    resultEl.textContent = `WIN: ${win}`;
+
+    let text = `WIN: ${win}\n`;
+
+    breakdown.forEach(b => {
+      highlightCells(b.line);
+      text += `${b.symbol} line → ${bet} × ${b.multiplier} = ${b.amount}\n`;
+    });
+
+    resultEl.textContent = text;
   } else {
     resultEl.textContent = "LOSE";
   }
