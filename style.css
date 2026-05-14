@@ -26,6 +26,8 @@ body {
 }
 
 .slot-cell {
+  width: 80px;
+  height: 80px;
   background: #000;
   border: 2px solid #555;
   border-radius: 6px;
@@ -35,8 +37,7 @@ body {
   align-items: center;
 }
 
-.reel {
-  display: flex;
-  flex-direction: column;
-  transition: transform 0.15s linear;
+.win-cell {
+  border-color: gold;
+  box-shadow: 0 0 10px gold;
 }
