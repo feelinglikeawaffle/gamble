@@ -1,305 +1,123 @@
-// --- Core state ---
 let money = 1000;
-let xp = 0;
-let level = 1;
-let day = 1;
+const moneyEl = document.getElementById("money");
+const resultEl = document.getElementById("result");
+const gridEl = document.getElementById("slot-grid");
+const spinBtn = document.getElementById("spin-btn");
 
-const DAY_DURATION_SECONDS = 5 * 60; // 5 minutes
-let remainingSeconds = DAY_DURATION_SECONDS;
-
-let moneyAtDayStart = money;
-
-// Simple XP curve: level n requires n * 1000 XP
-function xpNeededForLevel(lvl) {
-  return lvl * 1000;
-}
-
-// Games: minimal for now, but structured for expansion
-const games = [
-  {
-    id: "blackjack",
-    name: "Blackjack",
-    minBet: 25,
-    todayWagered: 0,
-    yesterdayWagered: 0,
-    unlockedAtLevel: 1
-  },
-  {
-    id: "slots",
-    name: "Slots",
-    minBet: 10,
-    todayWagered: 0,
-    yesterdayWagered: 0,
-    unlockedAtLevel: 1
-  },
-  {
-    id: "crash",
-    name: "Crash",
-    minBet: 50,
-    todayWagered: 0,
-    yesterdayWagered: 0,
-    unlockedAtLevel: 3
-  }
+// --- SYMBOLS WITH WEIGHTS + MULTIPLIERS ---
+const symbols = [
+  { icon: "🍒", weight: 40, payout: 5 },
+  { icon: "🍋", weight: 30, payout: 8 },
+  { icon: "🔔", weight: 20, payout: 15 },
+  { icon: "⭐", weight: 8, payout: 40 },
+  { icon: "💎", weight: 2, payout: 100 }
 ];
 
-let currentGameId = null;
+// Build weighted pool
+let weightedPool = [];
+symbols.forEach(s => {
+  for (let i = 0; i < s.weight; i++) weightedPool.push(s);
+});
 
-// --- DOM refs ---
-const moneyEl = document.getElementById("money");
-const xpEl = document.getElementById("xp");
-const levelEl = document.getElementById("level");
-const dayEl = document.getElementById("day");
-const timerEl = document.getElementById("timer");
+// --- PAYLINES (3x3) ---
+const paylines = [
+  [0,1,2],   // top row
+  [3,4,5],   // middle row
+  [6,7,8],   // bottom row
+  [0,4,8],   // diagonal TL → BR
+  [2,4,6]    // diagonal TR → BL
+];
 
-const gamesListEl = document.getElementById("games-list");
-const currentGameTitleEl = document.getElementById("current-game-title");
-const betInputEl = document.getElementById("bet-amount");
-const minBetLabelEl = document.getElementById("min-bet-label");
-const playButtonEl = document.getElementById("play-button");
-const resultMessageEl = document.getElementById("result-message");
+// --- INITIAL GRID ---
+let grid = Array(9).fill("❔");
+renderGrid();
 
-const dayStartMoneyEl = document.getElementById("day-start-money");
-const dayProfitEl = document.getElementById("day-profit");
-const logEl = document.getElementById("log");
-
-// --- Utility formatting ---
-function formatMoney(value) {
-  return "$" + value.toLocaleString("en-US", { maximumFractionDigits: 0 });
-}
-
-function formatTimer(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
-function log(message) {
-  const entry = document.createElement("div");
-  entry.className = "log-entry";
-  const time = new Date().toLocaleTimeString();
-  entry.innerHTML = `<span class="time">[${time}]</span>${message}`;
-  logEl.prepend(entry);
-}
-
-// --- Rendering ---
-function renderStats() {
-  moneyEl.textContent = formatMoney(money);
-  xpEl.textContent = xp.toLocaleString("en-US");
-  levelEl.textContent = level;
-  dayEl.textContent = day;
-  timerEl.textContent = formatTimer(remainingSeconds);
-
-  dayStartMoneyEl.textContent = formatMoney(moneyAtDayStart);
-  const diff = money - moneyAtDayStart;
-  const sign = diff >= 0 ? "+" : "-";
-  dayProfitEl.textContent = `${sign}${formatMoney(Math.abs(diff))}`;
-}
-
-function renderGamesList() {
-  gamesListEl.innerHTML = "";
-
-  games.forEach(game => {
-    if (level < game.unlockedAtLevel) return;
-
-    const item = document.createElement("div");
-    item.className = "game-item";
-    if (game.id === currentGameId) item.classList.add("active");
-
-    const nameSpan = document.createElement("span");
-    nameSpan.className = "game-name";
-    nameSpan.textContent = game.name;
-
-    const metaSpan = document.createElement("span");
-    metaSpan.className = "game-meta";
-    metaSpan.textContent = `Min bet: ${formatMoney(game.minBet)}`;
-
-    item.appendChild(nameSpan);
-    item.appendChild(metaSpan);
-
-    item.addEventListener("click", () => {
-      selectGame(game.id);
-    });
-
-    gamesListEl.appendChild(item);
+// --- RENDER ---
+function renderGrid() {
+  gridEl.innerHTML = "";
+  grid.forEach(symbol => {
+    const cell = document.createElement("div");
+    cell.className = "slot-cell";
+    cell.textContent = symbol;
+    gridEl.appendChild(cell);
   });
 }
 
-function renderCurrentGame() {
-  if (!currentGameId) {
-    currentGameTitleEl.textContent = "Select a game";
-    minBetLabelEl.textContent = "";
-    playButtonEl.disabled = true;
-    return;
-  }
-
-  const game = games.find(g => g.id === currentGameId);
-  currentGameTitleEl.textContent = game.name;
-  minBetLabelEl.textContent = `(Minimum bet: ${formatMoney(game.minBet)})`;
-  playButtonEl.disabled = false;
-
-  // Clamp bet input to at least min bet
-  if (Number(betInputEl.value) < game.minBet) {
-    betInputEl.value = game.minBet;
-  }
-  betInputEl.min = game.minBet;
+// --- RANDOM SYMBOL ---
+function randomSymbol() {
+  return weightedPool[Math.floor(Math.random() * weightedPool.length)];
 }
 
-// --- Game selection ---
-function selectGame(gameId) {
-  currentGameId = gameId;
-  renderGamesList();
-  renderCurrentGame();
-  resultMessageEl.textContent = "";
-  resultMessageEl.className = "result";
-}
+// --- SPIN ANIMATION ---
+async function spinReels() {
+  spinBtn.disabled = true;
+  resultEl.textContent = "";
 
-// --- Leveling ---
-function checkLevelUp() {
-  let needed = xpNeededForLevel(level);
-  let leveledUp = false;
-
-  while (xp >= needed) {
-    xp -= needed;
-    level += 1;
-    leveledUp = true;
-    needed = xpNeededForLevel(level);
-  }
-
-  if (leveledUp) {
-    log(`Level up! You are now level ${level}.`);
-    renderGamesList();
-  }
-}
-
-// --- End of day logic ---
-function endOfDay() {
-  const profit = money - moneyAtDayStart;
-  if (profit > 0) {
-    xp += profit;
-    log(`Day ${day} ended. You earned ${formatMoney(profit)} → ${profit.toLocaleString()} XP.`);
-    checkLevelUp();
-  } else if (profit < 0) {
-    log(`Day ${day} ended. You lost ${formatMoney(Math.abs(profit))}. No XP gained.`);
-  } else {
-    log(`Day ${day} ended. Broke even. No XP gained.`);
-  }
-
-  // Update min bets based on todayWagered
-  games.forEach(game => {
-    game.yesterdayWagered = game.todayWagered;
-
-    if (game.todayWagered > 0) {
-      // Simple inflation: +1% min bet per 500 wagered, capped at +100% per day
-      const factor = Math.min(1 + game.todayWagered / 50000, 2);
-      const oldMin = game.minBet;
-      game.minBet = Math.max(1, Math.round(game.minBet * factor));
-      log(
-        `${game.name} min bet changed from ${formatMoney(oldMin)} to ${formatMoney(
-          game.minBet
-        )} (wagered ${formatMoney(game.todayWagered)} today).`
-      );
-    } else {
-      // Light decay if untouched: min bet drifts 10% back toward 10
-      const target = 10;
-      const diff = game.minBet - target;
-      game.minBet = Math.round(game.minBet - diff * 0.1);
+  // Reel-by-reel animation
+  for (let r = 0; r < 3; r++) {
+    for (let t = 0; t < 10; t++) {
+      for (let row = 0; row < 3; row++) {
+        const index = row * 3 + r;
+        grid[index] = randomSymbol().icon;
+      }
+      renderGrid();
+      await new Promise(res => setTimeout(res, 60));
     }
+  }
 
-    game.todayWagered = 0;
+  // Final result
+  for (let i = 0; i < 9; i++) {
+    grid[i] = randomSymbol().icon;
+  }
+  renderGrid();
+
+  spinBtn.disabled = false;
+}
+
+// --- PAYOUT CALC ---
+function calculatePayout(bet) {
+  let totalWin = 0;
+
+  paylines.forEach(line => {
+    const a = grid[line[0]];
+    const b = grid[line[1]];
+    const c = grid[line[2]];
+
+    if (a === b && b === c) {
+      const symbol = symbols.find(s => s.icon === a);
+      totalWin += bet * symbol.payout;
+    }
   });
 
-  day += 1;
-  remainingSeconds = DAY_DURATION_SECONDS;
-  moneyAtDayStart = money;
-
-  renderStats();
-  renderGamesList();
-  renderCurrentGame();
+  return totalWin;
 }
 
-// --- Timer ---
-setInterval(() => {
-  if (remainingSeconds <= 0) {
-    endOfDay();
-  } else {
-    remainingSeconds -= 1;
-    timerEl.textContent = formatTimer(remainingSeconds);
-  }
-}, 1000);
+// --- SPIN BUTTON ---
+spinBtn.addEventListener("click", async () => {
+  const bet = Number(document.getElementById("bet").value);
 
-// --- Playing games (very simple odds for now) ---
-function playCurrentGame() {
-  if (!currentGameId) return;
-
-  const game = games.find(g => g.id === currentGameId);
-  let bet = Number(betInputEl.value);
-
-  if (!Number.isFinite(bet) || bet <= 0) {
-    resultMessageEl.textContent = "Enter a valid bet.";
-    resultMessageEl.className = "result";
+  if (bet <= 0 || bet > money) {
+    resultEl.textContent = "Invalid bet.";
     return;
   }
 
-  if (bet < game.minBet) {
-    resultMessageEl.textContent = `Bet must be at least ${formatMoney(game.minBet)}.`;
-    resultMessageEl.className = "result";
-    return;
-  }
-
-  if (bet > money) {
-    resultMessageEl.textContent = "You don't have enough money for that bet.";
-    resultMessageEl.className = "result";
-    return;
-  }
-
-  // Deduct bet
   money -= bet;
-  game.todayWagered += bet;
+  updateMoney();
 
-  // Simple per-game odds
-  let winChance;
-  let payoutMultiplier;
+  await spinReels();
 
-  switch (game.id) {
-    case "blackjack":
-      winChance = 0.47;
-      payoutMultiplier = 2.0;
-      break;
-    case "slots":
-      winChance = 0.42;
-      payoutMultiplier = 3.0;
-      break;
-    case "crash":
-      winChance = 0.35;
-      payoutMultiplier = 3.5;
-      break;
-    default:
-      winChance = 0.5;
-      payoutMultiplier = 2.0;
-  }
+  const win = calculatePayout(bet);
 
-  const roll = Math.random();
-  if (roll < winChance) {
-    const winnings = Math.round(bet * payoutMultiplier);
-    money += winnings;
-    resultMessageEl.textContent = `You won ${formatMoney(winnings - bet)}!`;
-    resultMessageEl.className = "result win";
-    log(`Won ${formatMoney(winnings - bet)} on ${game.name} (bet ${formatMoney(bet)}).`);
+  if (win > 0) {
+    money += win;
+    resultEl.textContent = `WIN: ${win}`;
   } else {
-    resultMessageEl.textContent = `You lost ${formatMoney(bet)}.`;
-    resultMessageEl.className = "result lose";
-    log(`Lost ${formatMoney(bet)} on ${game.name}.`);
+    resultEl.textContent = `LOSE`;
   }
 
-  renderStats();
+  updateMoney();
+});
+
+function updateMoney() {
+  moneyEl.textContent = "$" + money.toLocaleString();
 }
-
-// --- Event wiring ---
-playButtonEl.addEventListener("click", playCurrentGame);
-
-// Initial render
-renderStats();
-renderGamesList();
-// Auto-select first unlocked game
-const firstUnlocked = games.find(g => level >= g.unlockedAtLevel);
-if (firstUnlocked) selectGame(firstUnlocked.id);
