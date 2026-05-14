@@ -13,21 +13,6 @@ const reelStrips = [
 
 const reelPositions = [0,0,0];
 
-// PAYLINES
-const paylines = [
-  [0,1,2], [3,4,5], [6,7,8],
-  [0,4,8], [2,4,6]
-];
-
-// PAYOUT TABLE
-const payouts = {
-  "🍒": 5,
-  "🍋": 8,
-  "🔔": 15,
-  "⭐": 40,
-  "💎": 100
-};
-
 // Build initial grid
 function buildGrid() {
   gridEl.innerHTML = "";
@@ -49,7 +34,7 @@ function buildGrid() {
 
 buildGrid();
 
-// FAST SPIN (150–250ms)
+// FAST SPIN (40ms updates)
 async function spinReel(reelIndex, duration) {
   const strip = reelStrips[reelIndex];
   const reel = document.getElementById("reel-" + reelIndex);
@@ -61,7 +46,7 @@ async function spinReel(reelIndex, duration) {
     function animate(time) {
       const elapsed = time - start;
 
-      if (elapsed - lastUpdate > 40) { // FAST
+      if (elapsed - lastUpdate > 40) {
         reelPositions[reelIndex] = (reelPositions[reelIndex] + 1) % strip.length;
         lastUpdate = elapsed;
 
@@ -95,37 +80,122 @@ function getFinalGrid() {
   return result;
 }
 
+// Highlight winning cells
 function highlightCells(indices) {
   const cells = [...document.querySelectorAll(".slot-cell")];
   indices.forEach(i => cells[i].classList.add("win-cell"));
 }
 
-function calculatePayout(grid, bet) {
-  let win = 0;
+// YOUR CUSTOM SCORING SYSTEM
+function scoreCustom(grid, bet) {
+  let bonus = 0;
   let breakdown = [];
+  let highlightGroups = [];
 
-  paylines.forEach(line => {
-    const a = grid[line[0]];
-    const b = grid[line[1]];
-    const c = grid[line[2]];
+  const get = i => grid[i];
 
-    if (a === b && b === c) {
-      const mult = payouts[a];
-      const amount = bet * mult;
-      win += amount;
+  // --- 1. 3-in-a-row (1.5x each) ---
+  const lines = [
+    [0,1,2], [3,4,5], [6,7,8],
+    [0,3,6], [1,4,7], [2,5,8],
+    [0,4,8], [2,4,6]
+  ];
 
-      breakdown.push({
-        symbol: a,
-        line,
-        multiplier: mult,
-        amount
-      });
+  lines.forEach(line => {
+    if (get(line[0]) === get(line[1]) && get(line[1]) === get(line[2])) {
+      bonus += 1.5;
+      breakdown.push(`3-in-a-row (${get(line[0])}) → +1.5×`);
+      highlightGroups.push(line);
     }
   });
 
-  return { win, breakdown };
+  // --- 2. 2×2 squares (2x each) ---
+  const squares = [
+    [0,1,3,4],
+    [1,2,4,5],
+    [3,4,6,7],
+    [4,5,7,8]
+  ];
+
+  squares.forEach(sq => {
+    if (get(sq[0]) === get(sq[1]) &&
+        get(sq[1]) === get(sq[2]) &&
+        get(sq[2]) === get(sq[3])) {
+      bonus += 2;
+      breakdown.push(`2×2 square (${get(sq[0])}) → +2×`);
+      highlightGroups.push(sq);
+    }
+  });
+
+  // --- 3. Connected component detection ---
+  function floodFill(start) {
+    const target = get(start);
+    let visited = new Set([start]);
+    let queue = [start];
+
+    while (queue.length) {
+      const i = queue.pop();
+      const neighbors = [];
+
+      if (i % 3 !== 0) neighbors.push(i - 1);
+      if (i % 3 !== 2) neighbors.push(i + 1);
+      if (i > 2)        neighbors.push(i - 3);
+      if (i < 6)        neighbors.push(i + 3);
+
+      neighbors.forEach(n => {
+        if (!visited.has(n) && get(n) === target) {
+          visited.add(n);
+          queue.push(n);
+        }
+      });
+    }
+
+    return visited;
+  }
+
+  let largestGroup = 0;
+  let counted = new Set();
+
+  for (let i = 0; i < 9; i++) {
+    if (!counted.has(i)) {
+      const group = floodFill(i);
+      group.forEach(x => counted.add(x));
+      largestGroup = Math.max(largestGroup, group.size);
+    }
+  }
+
+  // --- 6-tile rectangle (5x) ---
+  if (largestGroup === 6) {
+    bonus += 5;
+    breakdown.push(`6-tile rectangle → +5×`);
+  }
+
+  // --- 8-tile match (7x) ---
+  if (largestGroup === 8) {
+    bonus += 7;
+    breakdown.push(`8-tile match → +7×`);
+  }
+
+  // --- 9-tile match (15x) ---
+  if (largestGroup === 9) {
+    bonus += 15;
+    breakdown.push(`FULL BOARD MATCH → +15×`);
+  }
+
+  // Final multiplier
+  const finalMultiplier = 1 + bonus;
+  const totalWin = bet * finalMultiplier;
+
+  return {
+    bonus,
+    finalMultiplier,
+    breakdown,
+    totalWin,
+    highlightGroups
+  };
 }
 
+// SPIN BUTTON
 spinBtn.addEventListener("click", async () => {
   const bet = Number(document.getElementById("bet").value);
   if (bet <= 0 || bet > money) {
@@ -147,19 +217,16 @@ spinBtn.addEventListener("click", async () => {
   await spinReel(2, 600);
 
   const finalGrid = getFinalGrid();
-  const { win, breakdown } = calculatePayout(finalGrid, bet);
+  const score = scoreCustom(finalGrid, bet);
 
-  if (win > 0) {
-    money += win;
+  // Highlight all groups
+  score.highlightGroups.forEach(group => highlightCells(group));
 
-    let text = `WIN: ${win}\n`;
-
-    breakdown.forEach(b => {
-      highlightCells(b.line);
-      text += `${b.symbol} line → ${bet} × ${b.multiplier} = ${b.amount}\n`;
-    });
-
-    resultEl.textContent = text;
+  if (score.totalWin > bet) {
+    money += score.totalWin;
+    resultEl.textContent =
+      `WIN: ${score.totalWin}\n\n` +
+      score.breakdown.join("\n");
   } else {
     resultEl.textContent = "LOSE";
   }
