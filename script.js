@@ -11,7 +11,7 @@ const reelStrips = [
   ["🔔","🍒","🍋","⭐","🍋","💎","🍒","🔔","🍋","⭐"]
 ];
 
-const reelPositions = [0,0,0];
+let reelPositions = [0,0,0];
 
 // Build initial grid
 function buildGrid() {
@@ -34,52 +34,6 @@ function buildGrid() {
 
 buildGrid();
 
-// FAST SPIN (40ms updates)
-async function spinReel(reelIndex, duration) {
-  const strip = reelStrips[reelIndex];
-  const reel = document.getElementById("reel-" + reelIndex);
-
-  let start = performance.now();
-  let lastUpdate = 0;
-
-  return new Promise(resolve => {
-    function animate(time) {
-      const elapsed = time - start;
-
-      if (elapsed - lastUpdate > 40) {
-        reelPositions[reelIndex] = (reelPositions[reelIndex] + 1) % strip.length;
-        lastUpdate = elapsed;
-
-        reel.innerHTML = "";
-        for (let i = 0; i < 3; i++) {
-          const cell = document.createElement("div");
-          cell.className = "slot-cell";
-          cell.textContent = strip[(reelPositions[reelIndex] + i) % strip.length];
-          reel.appendChild(cell);
-        }
-      }
-
-      if (elapsed < duration) {
-        requestAnimationFrame(animate);
-      } else {
-        resolve();
-      }
-    }
-
-    requestAnimationFrame(animate);
-  });
-}
-
-function getFinalGrid() {
-  let result = [];
-  for (let r = 0; r < 3; r++) {
-    const strip = reelStrips[r];
-    const pos = reelPositions[r];
-    result.push(strip[pos], strip[(pos+1)%strip.length], strip[(pos+2)%strip.length]);
-  }
-  return result;
-}
-
 // Force visual grid to match scoring grid
 function renderFinalGrid(finalGrid) {
   const cells = document.querySelectorAll(".slot-cell");
@@ -94,16 +48,15 @@ function highlightCells(indices) {
   indices.forEach(i => cells[i].classList.add("win-cell"));
 }
 
-// --- BOOSTED HIDDEN ODDS SYSTEM ---
-// MUCH more common now
+// --- BOOSTED HIDDEN ODDS ---
 function rollHiddenOutcome() {
   const roll = Math.random() * 100;
 
-  if (roll < 3) return "full9";      // 3%
-  if (roll < 8) return "match8";     // next 5%
-  if (roll < 18) return "rect6";     // next 10%
-  if (roll < 33) return "square4";   // next 15%
-  if (roll < 55) return "line3";     // next 22%
+  if (roll < 3) return "full9";
+  if (roll < 8) return "match8";
+  if (roll < 18) return "rect6";
+  if (roll < 33) return "square4";
+  if (roll < 55) return "line3";
 
   return "none";
 }
@@ -174,7 +127,7 @@ function forceLine3() {
   return grid;
 }
 
-// YOUR CUSTOM SCORING SYSTEM
+// --- CUSTOM SCORING SYSTEM ---
 function scoreCustom(grid, bet) {
   let bonus = 0;
   let breakdown = [];
@@ -182,7 +135,7 @@ function scoreCustom(grid, bet) {
 
   const get = i => grid[i];
 
-  // --- 1. 3-in-a-row (1.5x each) ---
+  // 3-in-a-row
   const lines = [
     [0,1,2], [3,4,5], [6,7,8],
     [0,3,6], [1,4,7], [2,5,8],
@@ -197,7 +150,7 @@ function scoreCustom(grid, bet) {
     }
   });
 
-  // --- 2. 2×2 squares (2x each) ---
+  // 2×2 squares
   const squares = [
     [0,1,3,4],
     [1,2,4,5],
@@ -215,7 +168,7 @@ function scoreCustom(grid, bet) {
     }
   });
 
-  // --- 3. Connected component detection ---
+  // Connected component detection
   function floodFill(start) {
     const target = get(start);
     let visited = new Set([start]);
@@ -279,7 +232,7 @@ function scoreCustom(grid, bet) {
   };
 }
 
-// SPIN BUTTON
+// --- SPIN BUTTON ---
 spinBtn.addEventListener("click", async () => {
   const bet = Number(document.getElementById("bet").value);
   if (bet <= 0 || bet > money) {
@@ -294,11 +247,7 @@ spinBtn.addEventListener("click", async () => {
 
   document.querySelectorAll(".slot-cell").forEach(c => c.classList.remove("win-cell"));
 
-  await spinReel(0, 300);
-  await spinReel(1, 450);
-  await spinReel(2, 600);
-
-  // HIDDEN ODDS
+  // 1. Decide final grid BEFORE spinning
   const outcome = rollHiddenOutcome();
   let finalGrid;
 
@@ -311,9 +260,36 @@ spinBtn.addEventListener("click", async () => {
     default: finalGrid = getFinalGrid(); break;
   }
 
-  // FIX: update visuals to match scoring
+  // 2. Spin reels INTO the final grid
+  for (let r = 0; r < 3; r++) {
+    const strip = reelStrips[r];
+    const targetTop = finalGrid[r * 3];
+    let targetIndex = strip.indexOf(targetTop);
+
+    // Spin until reelPositions[r] == targetIndex
+    const reel = document.getElementById("reel-" + r);
+    let spins = 0;
+
+    while (reelPositions[r] !== targetIndex) {
+      reelPositions[r] = (reelPositions[r] + 1) % strip.length;
+      spins++;
+
+      reel.innerHTML = "";
+      for (let i = 0; i < 3; i++) {
+        const cell = document.createElement("div");
+        cell.className = "slot-cell";
+        cell.textContent = strip[(reelPositions[r] + i) % strip.length];
+        reel.appendChild(cell);
+      }
+
+      await new Promise(res => setTimeout(res, 40));
+    }
+  }
+
+  // 3. Now force the exact final grid visually
   renderFinalGrid(finalGrid);
 
+  // 4. Score
   const score = scoreCustom(finalGrid, bet);
 
   score.highlightGroups.forEach(group => highlightCells(group));
