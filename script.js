@@ -34,14 +34,6 @@ function buildGrid() {
 
 buildGrid();
 
-// Force visual grid to match scoring grid
-function renderFinalGrid(finalGrid) {
-  const cells = document.querySelectorAll(".slot-cell");
-  for (let i = 0; i < 9; i++) {
-    cells[i].textContent = finalGrid[i];
-  }
-}
-
 // Highlight winning cells
 function highlightCells(indices) {
   const cells = [...document.querySelectorAll(".slot-cell")];
@@ -257,7 +249,10 @@ spinBtn.addEventListener("click", async () => {
     case "rect6": finalGrid = forceRect6(); break;
     case "square4": finalGrid = forceSquare4(); break;
     case "line3": finalGrid = forceLine3(); break;
-    default: finalGrid = getFinalGrid(); break;
+    default:
+      // Normal random final grid from reel positions
+      finalGrid = getFinalGrid();
+      break;
   }
 
   // 2. Spin reels INTO the final grid
@@ -266,13 +261,10 @@ spinBtn.addEventListener("click", async () => {
     const targetTop = finalGrid[r * 3];
     let targetIndex = strip.indexOf(targetTop);
 
-    // Spin until reelPositions[r] == targetIndex
     const reel = document.getElementById("reel-" + r);
-    let spins = 0;
 
     while (reelPositions[r] !== targetIndex) {
       reelPositions[r] = (reelPositions[r] + 1) % strip.length;
-      spins++;
 
       reel.innerHTML = "";
       for (let i = 0; i < 3; i++) {
@@ -286,7 +278,7 @@ spinBtn.addEventListener("click", async () => {
     }
   }
 
-  // 3. Now force the exact final grid visually
+  // 3. Force exact final grid visually
   renderFinalGrid(finalGrid);
 
   // 4. Score
