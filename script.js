@@ -4,40 +4,30 @@ const resultEl = document.getElementById("result");
 const gridEl = document.getElementById("slot-grid");
 const spinBtn = document.getElementById("spin-btn");
 
-// REAL REEL STRIPS
-const reelStrips = [
-  ["🍒","🍋","🔔","⭐","🍒","🍋","💎","🍋","🍒","🔔"],
-  ["🍋","🍒","⭐","🍋","🔔","🍒","💎","🍋","⭐","🍒"],
-  ["🔔","🍒","🍋","⭐","🍋","💎","🍒","🔔","🍋","⭐"]
-];
+// All possible symbols
+const SYMBOLS = ["🍒","🍋","🔔","⭐","💎"];
 
-let reelPositions = [0,0,0];
-
-// Build initial grid
+// Build initial empty grid
 function buildGrid() {
   gridEl.innerHTML = "";
-  for (let r = 0; r < 3; r++) {
-    const reel = document.createElement("div");
-    reel.className = "reel";
-    reel.id = "reel-" + r;
-
-    for (let i = 0; i < 3; i++) {
-      const cell = document.createElement("div");
-      cell.className = "slot-cell";
-      cell.textContent = reelStrips[r][(reelPositions[r] + i) % reelStrips[r].length];
-      reel.appendChild(cell);
-    }
-
-    gridEl.appendChild(reel);
+  for (let i = 0; i < 9; i++) {
+    const cell = document.createElement("div");
+    cell.className = "slot-cell";
+    cell.textContent = "❔";
+    gridEl.appendChild(cell);
   }
 }
-
 buildGrid();
 
 // Highlight winning cells
 function highlightCells(indices) {
   const cells = [...document.querySelectorAll(".slot-cell")];
   indices.forEach(i => cells[i].classList.add("win-cell"));
+}
+
+// Random symbol
+function randomSymbol() {
+  return SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
 }
 
 // --- BOOSTED HIDDEN ODDS ---
@@ -54,11 +44,6 @@ function rollHiddenOutcome() {
 }
 
 // --- PATTERN FORCERS ---
-function randomSymbol() {
-  const all = ["🍒","🍋","🔔","⭐","💎"];
-  return all[Math.floor(Math.random()*all.length)];
-}
-
 function randomSymbolDifferent(s) {
   let r = s;
   while (r === s) r = randomSymbol();
@@ -224,6 +209,34 @@ function scoreCustom(grid, bet) {
   };
 }
 
+// --- SPIN ANIMATION (PURE RANDOM) ---
+async function spinAnimation(finalGrid) {
+  const cells = document.querySelectorAll(".slot-cell");
+
+  // Spin for 600ms
+  const spinTime = 600;
+  const start = performance.now();
+
+  return new Promise(resolve => {
+    function animate(time) {
+      const elapsed = time - start;
+
+      // While spinning: show random symbols
+      if (elapsed < spinTime) {
+        cells.forEach(c => c.textContent = randomSymbol());
+        requestAnimationFrame(animate);
+      } else {
+        // Stop: show finalGrid
+        for (let i = 0; i < 9; i++) {
+          cells[i].textContent = finalGrid[i];
+        }
+        resolve();
+      }
+    }
+    requestAnimationFrame(animate);
+  });
+}
+
 // --- SPIN BUTTON ---
 spinBtn.addEventListener("click", async () => {
   const bet = Number(document.getElementById("bet").value);
@@ -250,38 +263,15 @@ spinBtn.addEventListener("click", async () => {
     case "square4": finalGrid = forceSquare4(); break;
     case "line3": finalGrid = forceLine3(); break;
     default:
-      // Normal random final grid from reel positions
-      finalGrid = getFinalGrid();
+      // Pure random 3×3 grid
+      finalGrid = Array(9).fill(0).map(() => randomSymbol());
       break;
   }
 
-  // 2. Spin reels INTO the final grid
-  for (let r = 0; r < 3; r++) {
-    const strip = reelStrips[r];
-    const targetTop = finalGrid[r * 3];
-    let targetIndex = strip.indexOf(targetTop);
+  // 2. Spin animation INTO finalGrid
+  await spinAnimation(finalGrid);
 
-    const reel = document.getElementById("reel-" + r);
-
-    while (reelPositions[r] !== targetIndex) {
-      reelPositions[r] = (reelPositions[r] + 1) % strip.length;
-
-      reel.innerHTML = "";
-      for (let i = 0; i < 3; i++) {
-        const cell = document.createElement("div");
-        cell.className = "slot-cell";
-        cell.textContent = strip[(reelPositions[r] + i) % strip.length];
-        reel.appendChild(cell);
-      }
-
-      await new Promise(res => setTimeout(res, 40));
-    }
-  }
-
-  // 3. Force exact final grid visually
-  renderFinalGrid(finalGrid);
-
-  // 4. Score
+  // 3. Score
   const score = scoreCustom(finalGrid, bet);
 
   score.highlightGroups.forEach(group => highlightCells(group));
